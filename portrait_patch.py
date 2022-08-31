@@ -83,7 +83,7 @@ def replace_content(content_file: pathlib.Path) -> Dict[str, Any]:
         item: Dict[str, Any]
         for item in content_dict["Changes"]:
             item["Action"] = "Load"
-            item["Target"] = f"Mods/HDPortraitsPatch/{item['Target']}"
+            item["Target"] = f"Mods/HDPortraits/{pathlib.PurePath(item['Target']).name}"
             item["FromFile"] = (
                 pathlib.PurePath(item["FromFile"]).with_suffix(".json").as_posix()
             )
@@ -164,7 +164,7 @@ def convert_portraits() -> None:
     new_manifest = remove_pytk_dependency(manifest_file)
     if copy:
         manifest_file = _add_copy_directory(manifest_file, content_patch_dir, copy_dir)
-    _rewrite(manifest_file, new_manifest, backup = not copy)
+    _rewrite(manifest_file, new_manifest, backup=not copy)
 
     return
 
