@@ -6,18 +6,20 @@ Stardew Valley HD Portrait Patcher by purplexpresso
     Licensed under GPL 3.0
 """
 import argparse
+from ast import parse
+from enum import Enum, auto
 import logging
-from copy import deepcopy
 import pathlib
-from typing import Any, Dict, List
+import re as regex
+from copy import deepcopy
+from typing import Any, Dict, Final, List
 
 import json5
 
 
-def _add_copy_directory(
-    path: pathlib.Path, main_dir: pathlib.Path, copy_dir: pathlib.Path
-) -> pathlib.Path:
-    return copy_dir / path.relative_to(main_dir)
+class FileParsed(Enum):
+    INDIVIDUAL = auto()
+    GLOBBED = auto()
 
 
 def _clone_dir_tree(source: pathlib.Path, destination: pathlib.Path) -> None:
@@ -32,85 +34,83 @@ def _clone_dir_tree(source: pathlib.Path, destination: pathlib.Path) -> None:
     )
 
 
-def _rewrite(file: pathlib.Path, json_data: Dict[str, Any], backup=True) -> None:
-    if backup:
-        file.rename(file.with_suffix(".bak"))
-    with file.open("w+") as new_file:
+def _valid_dir(path: str, check_content=False) -> pathlib.Path:
+    directory = pathlib.Path(path)
+    if directory.is_dir():
+        if check_content and not (directory / "content.json").is_file():
+            raise argparse.ArgumentTypeError(
+                f"{directory.resolve()} does not have content.json inside"
+            )
+        return directory
+    else:
+        raise argparse.ArgumentTypeError(f"{directory.resolve()} is not a valid path")
+
+
+def _get_file_or_backup(file: pathlib.Path) -> pathlib.Path:
+    backup_file = file.with_suffix(".bak")
+    return backup_file if backup_file.is_file() else file
+
+
+def _rewrite(
+    file: pathlib.Path,
+    json_data: Dict[str, Any],
+    main_dir: pathlib.Path,
+    copy_dir: pathlib.Path | None,
+    force_rewrite=False,
+) -> None:
+    backup_file = file.with_suffix(".bak")
+    if not (force_rewrite or copy_dir or backup_file.is_file()):
+        file.rename(backup_file)
+    with (file if copy_dir is None else copy_dir / file.relative_to(main_dir)).open(
+        "w+"
+    ) as new_file:
         json5.dump(json_data, new_file, quote_keys=True, indent=4)
 
 
 def remove_pytk_dependency(manifest_file: pathlib.Path) -> Dict[str, Any]:
-    pytk_dependency = {"UniqueID": "Platonymous.Toolkit"}
-    hd_portraits_dependency = {"UniqueID": "tlitookilakin.HDPortraits"}
     with manifest_file.open("r") as manifest:
         manifest_dict: Dict[str, Any] = json5.load(manifest)
-        dependencies: List[Dict[str, str]] = manifest_dict["Dependencies"]
-        dependencies.append(hd_portraits_dependency)
-        try:
-            dependencies.remove(pytk_dependency)
-        except ValueError:
-            pass
-        return manifest_dict
+    
+    PYTK_DEPENDENCY: Final = {"UniqueID": "Platonymous.Toolkit"}
+    HD_PORTRAITS_DEPENDENCY: Final = {"UniqueID": "tlitookilakin.HDPortraits"}
+
+    dependencies: List[Dict[str, str]] = manifest_dict["Dependencies"]
+    dependencies.append(HD_PORTRAITS_DEPENDENCY)
+    try:
+        dependencies.remove(PYTK_DEPENDENCY)
+    except ValueError:
+        pass
+    return manifest_dict
 
 
-def create_asset_json(portrait_file: pathlib.Path) -> Dict[str, Any]:
-    with portrait_file.with_suffix(".pytk.json").open("r") as pytk:
-        pytk_dict: Dict[str, Any] = json5.load(pytk)
-        sprite_size = int(pytk_dict["Scale"]) * 64
-        asset_dict = {
-            "Size": sprite_size,
-            "Portrait": f"Mods/HDPortraitsPatch/{portrait_file.stem}",
-        }
-        # if "Animation" in pytk_dict:
-        #     pytk_animation: Dict[str, int] = pytk_dict["Animation"]
-        #     asset_dict["Animation"] = {
-        #         "HFrames": int(
-        #             pytk_animation.get("FrameWidth", sprite_size) / sprite_size
-        #         ),
-        #         "VFrames": int(
-        #             pytk_animation.get("FrameHeight", sprite_size) / sprite_size
-        #         ),
-        #         "Speed": int(1000 / pytk_animation.get("FPS", 30)),
-        #     }
+def create_metadata_json(
+    metadata_file: pathlib.Path, target_name: str
+) -> Dict[str, Any] | None:
+    try:
+        with metadata_file.with_suffix(".pytk.json").open("r") as pytk_file:
+            pytk_dict: Dict[str, Any] = json5.load(pytk_file)
+    except FileNotFoundError:
+        return None
 
-        return asset_dict
+    STARDEW_PORTRAIT_SIZE: Final[int] = 64
 
-
-def replace_content(content_file: pathlib.Path) -> Dict[str, Any]:
-    with content_file.open("r") as content:
-        content_dict: Dict[str, Any] = json5.load(content)
-        item: Dict[str, Any]
-
-        for index, metadata_item in enumerate(content_dict["Changes"].copy()):
-            metadata_item["Action"] = "Load"
-            portrait_item = deepcopy(metadata_item)
-            portrait_name = pathlib.PurePath(metadata_item["Target"]).name
-            portrait_file = pathlib.PurePath(metadata_item["FromFile"])
-
-            metadata_item["Target"] = f"Mods/HDPortraits/{portrait_name}"
-            metadata_item["FromFile"] = portrait_file.with_suffix(".json").as_posix()
-
-            portrait_item["Target"] = f"Mods/HDPortraitsPatch/{portrait_name}"
-            portrait_item["FromFile"] = portrait_file.as_posix()
-
-            content_dict["Changes"].insert(2 * index, portrait_item)
-
-        return content_dict
-
-
-def _is_valid_dir(path: str) -> str:
-    directory = pathlib.Path(path)
-    if directory.is_dir():
-        if (directory / "content.json").is_file():
-            return path
-        else:
-            raise argparse.ArgumentTypeError(
-                f"path: {directory.resolve()} does not have content.json inside"
-            )
-    else:
-        raise argparse.ArgumentTypeError(
-            f"path: {directory.resolve()} is not a valid path"
-        )
+    sprite_size = int(pytk_dict["Scale"]) * STARDEW_PORTRAIT_SIZE
+    asset_dict = {
+        "Size": sprite_size,
+        "Portrait": target_name,
+    }
+    # if "Animation" in pytk_dict:
+    #     pytk_animation: Dict[str, int] = pytk_dict["Animation"]
+    #     asset_dict["Animation"] = {
+    #         "HFrames": int(
+    #             pytk_animation.get("FrameWidth", sprite_size) / sprite_size
+    #         ),
+    #         "VFrames": int(
+    #             pytk_animation.get("FrameHeight", sprite_size) / sprite_size
+    #         ),
+    #         "Speed": int(1000 / pytk_animation.get("FPS", 30)),
+    #     }
+    return asset_dict
 
 
 def convert_portraits() -> None:
@@ -120,56 +120,134 @@ def convert_portraits() -> None:
     parser.add_argument(
         "--path",
         "-p",
-        default=".",
-        type=_is_valid_dir,
-        help="path to Content Patcher directory",
+        required=True,
+        type=lambda str: _valid_dir(str, check_content=True),
+        help="Path to Content Patcher directory",
     )
     parser.add_argument(
         "--mode",
         "-m",
         default="internal",
+        type=str,
         choices=["internal", "copy"],
-        help="mode of operation. [internal] changes the files inside the folder, while [copy] creates a new folder structure entirely, most useful with a VFS",
+        help="Mode of operation. [internal] changes the files inside the folder, while [copy] creates a new folder structure entirely, most useful with a VFS",
+    )
+    parser.add_argument(
+        "--copy_dir",
+        nargs="?",
+        type=_valid_dir,
+        help="Sets directory where copied files are outputed. Only valid if --mode copy is specified",
+    )
+    parser.add_argument(
+        "--prefix",
+        default="HDPortraitsPatch",
+        type=str,
+        help="Prefix on generated Targets. Do not touch unless you know what you're doing.",
     )
     args = parser.parse_args()
 
-    copy: bool = args.mode == "copy"
-    content_patch_dir = pathlib.Path(args.path).resolve()
-    copy_dir = content_patch_dir / content_patch_dir.name
-
-    content_file = content_patch_dir / "content.json"
-
-    if copy:
+    content_patch_dir: Final[pathlib.Path] = args.path
+    copy_dir: Final[pathlib.Path] | None = (
+        (args.copy_dir if args.copy_dir is not None else content_patch_dir)
+        / content_patch_dir.name
+        if args.mode == "copy"
+        else None
+    )
+    if copy_dir:
         _clone_dir_tree(content_patch_dir, copy_dir)
 
-    new_content = replace_content(content_file)
+    hd_portraits: Final = pathlib.PurePath("Mods/HDPortraits")
+    hd_portraits_patch: Final = pathlib.PurePath(f"Mods/{args.prefix}")
 
-    if copy:
-        content_file = _add_copy_directory(content_file, content_patch_dir, copy_dir)
+    content_file: Final = _get_file_or_backup(content_patch_dir / "content.json")
 
-    _rewrite(content_file, new_content, backup=not copy)
+    content_patcher_token: Final = regex.compile(r"\{\{(.*)\}\}")
+    with content_file.open("r") as content:
+        content_dict: Dict[str, Any] = json5.load(content)
 
-    for portrait_file in content_patch_dir.rglob("*.png"):
-        portrait_pytk_file = portrait_file.with_suffix(".pytk.json")
-        if not portrait_pytk_file.is_file():
-            break
-        portrait_data: Dict[str, Any] = create_asset_json(portrait_file)
+    metadata_item: Dict[str, Any]
+    for index, metadata_item in enumerate(content_dict["Changes"].copy()):
+        metadata_item["Action"] = "Load"
+        portrait_item = deepcopy(metadata_item)
 
-        new_portrait_file = (
-            portrait_file
-            if not copy
-            else _add_copy_directory(portrait_file, content_patch_dir, copy_dir)
+        portrait_name: Final = pathlib.PurePath(metadata_item["Target"]).name
+        portrait_file: Final = content_patch_dir / pathlib.PurePath(
+            metadata_item["FromFile"]
         )
+        metadata_file: Final = portrait_file.with_suffix(".json")
 
-        with new_portrait_file.with_suffix(".json").open("w+") as portrait_json:
-            json5.dump(portrait_data, portrait_json, quote_keys=True, indent=4)
+        hd_portraits_target_path: Final = hd_portraits / portrait_name
+        metadata_item["Target"] = hd_portraits_target_path.as_posix()
+        metadata_item["FromFile"] = metadata_file.relative_to(
+            content_patch_dir
+        ).as_posix()
 
-    manifest_file = content_patch_dir / "manifest.json"
+        hd_portraits_patch_target_path: Final = hd_portraits_patch / portrait_name
+        portrait_item["Target"] = hd_portraits_patch_target_path.as_posix()
+        portrait_item["FromFile"] = portrait_file.relative_to(
+            content_patch_dir
+        ).as_posix()
 
-    new_manifest = remove_pytk_dependency(manifest_file)
-    if copy:
-        manifest_file = _add_copy_directory(manifest_file, content_patch_dir, copy_dir)
-    _rewrite(manifest_file, new_manifest, backup=not copy)
+        content_dict["Changes"].insert(2 * index, portrait_item)
+
+        parsed_files: Dict[str, FileParsed] = {}
+        print(portrait_file.name)
+        if content_patcher_token.search(portrait_file.name):
+            for globbed_portrait_file in portrait_file.parent.glob("*.png"):
+                if globbed_portrait_file.name in parsed_files:
+                    continue
+
+                parsed_files[globbed_portrait_file.name] = FileParsed.GLOBBED
+                globbed_metadata_file = globbed_portrait_file.with_suffix(".json")
+
+                globbed_metadata_json = create_metadata_json(
+                    globbed_metadata_file, hd_portraits_patch_target_path.as_posix()
+                )
+                if globbed_metadata_json is None:
+                    continue
+
+                _rewrite(
+                    globbed_metadata_file,
+                    globbed_metadata_json,
+                    content_patch_dir,
+                    copy_dir,
+                    force_rewrite=True,
+                )
+        elif portrait_file.is_file():
+            if parsed_files.get(portrait_file.name) is FileParsed.INDIVIDUAL:
+                continue
+
+            parsed_files[portrait_file.name] = FileParsed.INDIVIDUAL
+            metadata_json = create_metadata_json(
+                metadata_file, hd_portraits_patch_target_path.as_posix()
+            )
+            if metadata_json is None:
+                continue
+
+            _rewrite(
+                metadata_file,
+                metadata_json,
+                content_patch_dir,
+                copy_dir,
+                force_rewrite=True,
+            )
+
+    _rewrite(
+        content_file,
+        content_dict,
+        content_patch_dir,
+        copy_dir,
+    )
+
+    manifest_file: Final = _get_file_or_backup(content_patch_dir / "manifest.json")
+    manifest_dict: Final = remove_pytk_dependency(manifest_file)
+
+    _rewrite(
+        manifest_file,
+        manifest_dict,
+        content_patch_dir,
+        copy_dir,
+    )
 
     return
 
