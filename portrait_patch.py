@@ -61,17 +61,17 @@ def create_asset_json(portrait_file: pathlib.Path) -> Dict[str, Any]:
             "Size": sprite_size,
             "Portrait": f"Mods/HDPortraitsPatch/{portrait_file.stem}",
         }
-        if "Animation" in pytk_dict:
-            pytk_animation: Dict[str, int] = pytk_dict["Animation"]
-            asset_dict["Animation"] = {
-                "HFrames": int(
-                    pytk_animation.get("FrameWidth", sprite_size) / sprite_size
-                ),
-                "VFrames": int(
-                    pytk_animation.get("FrameHeight", sprite_size) / sprite_size
-                ),
-                "Speed": int(1000 / pytk_animation.get("FPS", 30)),
-            }
+        # if "Animation" in pytk_dict:
+        #     pytk_animation: Dict[str, int] = pytk_dict["Animation"]
+        #     asset_dict["Animation"] = {
+        #         "HFrames": int(
+        #             pytk_animation.get("FrameWidth", sprite_size) / sprite_size
+        #         ),
+        #         "VFrames": int(
+        #             pytk_animation.get("FrameHeight", sprite_size) / sprite_size
+        #         ),
+        #         "Speed": int(1000 / pytk_animation.get("FPS", 30)),
+        #     }
 
         return asset_dict
 
