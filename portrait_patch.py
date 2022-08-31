@@ -191,7 +191,6 @@ def convert_portraits() -> None:
         content_dict["Changes"].insert(2 * index, portrait_item)
 
         parsed_files: Dict[str, FileParsed] = {}
-        print(portrait_file.name)
         if content_patcher_token.search(portrait_file.name):
             for globbed_portrait_file in portrait_file.parent.glob("*.png"):
                 if globbed_portrait_file.name in parsed_files:
