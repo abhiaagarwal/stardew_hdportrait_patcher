@@ -7,6 +7,7 @@ Stardew Valley HD Portrait Patcher by purplexpresso
 """
 import argparse
 import logging
+from copy import deepcopy
 import pathlib
 from typing import Any, Dict, List
 
@@ -52,15 +53,13 @@ def remove_pytk_dependency(manifest_file: pathlib.Path) -> Dict[str, Any]:
         return manifest_dict
 
 
-def create_asset_json(
-    portrait_file: pathlib.Path, working_directory: pathlib.Path
-) -> Dict[str, Any]:
+def create_asset_json(portrait_file: pathlib.Path) -> Dict[str, Any]:
     with portrait_file.with_suffix(".pytk.json").open("r") as pytk:
         pytk_dict: Dict[str, Any] = json5.load(pytk)
         sprite_size = int(pytk_dict["Scale"]) * 64
         asset_dict = {
             "Size": sprite_size,
-            "Portrait": portrait_file.relative_to(working_directory).as_posix(),
+            "Portrait": f"Mods/HDPortraitsPatch/{portrait_file.stem}",
         }
         if "Animation" in pytk_dict:
             pytk_animation: Dict[str, int] = pytk_dict["Animation"]
@@ -81,12 +80,19 @@ def replace_content(content_file: pathlib.Path) -> Dict[str, Any]:
     with content_file.open("r") as content:
         content_dict: Dict[str, Any] = json5.load(content)
         item: Dict[str, Any]
-        for item in content_dict["Changes"]:
+
+        for index, item in enumerate(content_dict["Changes"].copy()):
             item["Action"] = "Load"
-            item["Target"] = f"Mods/HDPortraits/{pathlib.PurePath(item['Target']).name}"
-            item["FromFile"] = (
-                pathlib.PurePath(item["FromFile"]).with_suffix(".json").as_posix()
-            )
+            portrait_name = pathlib.PurePath(item["Target"]).name
+            item["Target"] = f"Mods/HDPortraits/{portrait_name}"
+            portrait_file = pathlib.PurePath(item["FromFile"])
+            item["FromFile"] = portrait_file.with_suffix(".json").as_posix()
+
+            portrait_item = deepcopy(item)
+            portrait_item["Target"] = f"Mods/HDPortraitsPatch/{portrait_name}"
+            portrait_item["FromFile"] = portrait_file.as_posix()
+
+            content_dict["Changes"].insert(2 * index, portrait_item)
 
         return content_dict
 
@@ -146,9 +152,7 @@ def convert_portraits() -> None:
         portrait_pytk_file = portrait_file.with_suffix(".pytk.json")
         if not portrait_pytk_file.is_file():
             break
-        portrait_data: Dict[str, Any] = create_asset_json(
-            portrait_file, content_patch_dir
-        )
+        portrait_data: Dict[str, Any] = create_asset_json(portrait_file)
 
         new_portrait_file = (
             portrait_file
