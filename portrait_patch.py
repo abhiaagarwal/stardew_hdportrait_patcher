@@ -1,16 +1,41 @@
 """
-Stardew Valley HD Portrait Patcher by purplecoffee
-    Last Modified 8/30/22
-    Converts PyTK based HD Portraits into HD Portrait Mod by swyrl
-    See usage with portrait_patch --help
+Stardew Valley HD Portrait Patcher by purplexpresso
+    Last Modified 8/31/22
+    Converts PyTK based HD Portrait mods for Stardew Valley into HD Portraits by swyrl compatible mod
+    See usage with portrait_patch.py --help
     Licensed under GPL 3.0
 """
 import argparse
+import logging
 import pathlib
-import json5
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
-from pprint import pprint
+import json5
+
+
+def _add_copy_directory(
+    path: pathlib.Path, main_dir: pathlib.Path, copy_dir: pathlib.Path
+) -> pathlib.Path:
+    return copy_dir / path.relative_to(main_dir)
+
+
+def _clone_dir_tree(source: pathlib.Path, destination: pathlib.Path) -> None:
+    import shutil
+
+    shutil.copytree(
+        source.resolve(),
+        destination.resolve(),
+        ignore=lambda directory, files: [
+            file for file in files if (pathlib.Path(directory) / file).is_file()
+        ],
+    )
+
+
+def _rewrite(file: pathlib.Path, json_data: Dict[str, Any], backup=True) -> None:
+    if backup:
+        file.rename(file.with_suffix(".bak"))
+    with file.open("w+") as new_file:
+        json5.dump(json_data, new_file, quote_keys=True, indent=4)
 
 
 def remove_pytk_dependency(manifest_file: pathlib.Path) -> Dict[str, Any]:
@@ -20,7 +45,10 @@ def remove_pytk_dependency(manifest_file: pathlib.Path) -> Dict[str, Any]:
         manifest_dict: Dict[str, Any] = json5.load(manifest)
         dependencies: List[Dict[str, str]] = manifest_dict["Dependencies"]
         dependencies.append(hd_portraits_dependency)
-        dependencies.remove(pytk_dependency)
+        try:
+            dependencies.remove(pytk_dependency)
+        except ValueError:
+            pass
         return manifest_dict
 
 
@@ -43,7 +71,7 @@ def create_asset_json(
                 "VFrames": int(
                     pytk_animation.get("FrameHeight", sprite_size) / sprite_size
                 ),
-                "Speed": int(1000 / pytk_animation.get("FPS", 20)),
+                "Speed": int(1000 / pytk_animation.get("FPS", 30)),
             }
 
         return asset_dict
@@ -52,6 +80,7 @@ def create_asset_json(
 def replace_content(content_file: pathlib.Path) -> Dict[str, Any]:
     with content_file.open("r") as content:
         content_dict: Dict[str, Any] = json5.load(content)
+        item: Dict[str, Any]
         for item in content_dict["Changes"]:
             item["Action"] = "Load"
             item["Target"] = f"Mods/HDPortraitsPatch/{item['Target']}"
@@ -62,40 +91,83 @@ def replace_content(content_file: pathlib.Path) -> Dict[str, Any]:
         return content_dict
 
 
-def main() -> None:
-    # working_directory = pathlib.Path(__file__).parent.absolute()
-    working_directory = pathlib.Path(
-        "/Users/abhiagarwal/Code/stardew_hdtexture_patcher/Test/[CP] DCBurger's High Res Portraits"
+def _is_valid_dir(path: str) -> str:
+    directory = pathlib.Path(path)
+    if directory.is_dir():
+        if (directory / "content.json").is_file():
+            return path
+        else:
+            raise argparse.ArgumentTypeError(
+                f"path: {directory.resolve()} does not have content.json inside"
+            )
+    else:
+        raise argparse.ArgumentTypeError(
+            f"path: {directory.resolve()} is not a valid path"
+        )
+
+
+def convert_portraits() -> None:
+    parser = argparse.ArgumentParser(
+        description="Converts PyTK based HD Portrait mods for Stardew Valley into HD Portraits by swyrl compatible mod",
     )
+    parser.add_argument(
+        "--path",
+        "-p",
+        default=".",
+        type=_is_valid_dir,
+        help="path to Content Patcher directory",
+    )
+    parser.add_argument(
+        "--mode",
+        "-m",
+        default="internal",
+        choices=["internal", "copy"],
+        help="mode of operation. [internal] changes the files inside the folder, while [copy] creates a new folder structure entirely, most useful with a VFS",
+    )
+    args = parser.parse_args()
 
-    content_file = working_directory / "content.json"
+    copy: bool = args.mode == "copy"
+    content_patch_dir = pathlib.Path(args.path).resolve()
+    copy_dir = content_patch_dir / content_patch_dir.name
 
-    if not content_file.is_file():
-        print("File needs to be located in same directory as content.json")
-        return
+    content_file = content_patch_dir / "content.json"
+
+    if copy:
+        _clone_dir_tree(content_patch_dir, copy_dir)
 
     new_content = replace_content(content_file)
-    content_file.rename(content_file.with_suffix(".bak"))
-    with content_file.open("w+") as content:
-        json5.dump(new_content, content, quote_keys=True, indent=4)
 
-    for portrait_file in working_directory.rglob("*.png"):
+    if copy:
+        content_file = _add_copy_directory(content_file, content_patch_dir, copy_dir)
+
+    _rewrite(content_file, new_content, backup=not copy)
+
+    for portrait_file in content_patch_dir.rglob("*.png"):
         portrait_pytk_file = portrait_file.with_suffix(".pytk.json")
         if not portrait_pytk_file.is_file():
             break
         portrait_data: Dict[str, Any] = create_asset_json(
-            portrait_file, working_directory
+            portrait_file, content_patch_dir
         )
-        with portrait_file.with_suffix(".json").open("w+") as portrait_json:
+
+        new_portrait_file = (
+            portrait_file
+            if not copy
+            else _add_copy_directory(portrait_file, content_patch_dir, copy_dir)
+        )
+
+        with new_portrait_file.with_suffix(".json").open("w+") as portrait_json:
             json5.dump(portrait_data, portrait_json, quote_keys=True, indent=4)
 
-    manifest_file = working_directory / "manifest.json"
+    manifest_file = content_patch_dir / "manifest.json"
 
     new_manifest = remove_pytk_dependency(manifest_file)
-    pprint(new_manifest)
+    if copy:
+        manifest_file = _add_copy_directory(manifest_file, content_patch_dir, copy_dir)
+    _rewrite(manifest_file, new_manifest, backup = not copy)
 
     return
 
 
 if __name__ == "__main__":
-    main()
+    convert_portraits()
