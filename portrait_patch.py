@@ -81,14 +81,15 @@ def replace_content(content_file: pathlib.Path) -> Dict[str, Any]:
         content_dict: Dict[str, Any] = json5.load(content)
         item: Dict[str, Any]
 
-        for index, item in enumerate(content_dict["Changes"].copy()):
-            item["Action"] = "Load"
-            portrait_name = pathlib.PurePath(item["Target"]).name
-            item["Target"] = f"Mods/HDPortraits/{portrait_name}"
-            portrait_file = pathlib.PurePath(item["FromFile"])
-            item["FromFile"] = portrait_file.with_suffix(".json").as_posix()
+        for index, metadata_item in enumerate(content_dict["Changes"].copy()):
+            metadata_item["Action"] = "Load"
+            portrait_item = deepcopy(metadata_item)
+            portrait_name = pathlib.PurePath(metadata_item["Target"]).name
+            portrait_file = pathlib.PurePath(metadata_item["FromFile"])
 
-            portrait_item = deepcopy(item)
+            metadata_item["Target"] = f"Mods/HDPortraits/{portrait_name}"
+            metadata_item["FromFile"] = portrait_file.with_suffix(".json").as_posix()
+
             portrait_item["Target"] = f"Mods/HDPortraitsPatch/{portrait_name}"
             portrait_item["FromFile"] = portrait_file.as_posix()
 
