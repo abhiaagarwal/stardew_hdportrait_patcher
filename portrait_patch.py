@@ -6,7 +6,6 @@ Stardew Valley HD Portrait Patcher by purplexpresso
     Licensed under GPL 3.0
 """
 import argparse
-from ast import parse
 from enum import Enum, auto
 import logging
 from collections import defaultdict
@@ -32,6 +31,7 @@ def _clone_dir_tree(source: pathlib.Path, destination: pathlib.Path) -> None:
         ignore=lambda directory, files: [
             file for file in files if (pathlib.Path(directory) / file).is_file()
         ],
+        dirs_exist_ok=not source == destination.parent,
     )
 
 
@@ -71,7 +71,7 @@ def _rewrite(
 def remove_pytk_dependency(manifest_file: pathlib.Path) -> Dict[str, Any]:
     with manifest_file.open("r") as manifest:
         manifest_dict: DefaultDict[str, Any] = defaultdict(list, json5.load(manifest))
-    
+
     PYTK_DEPENDENCY: Final = {"UniqueID": "Platonymous.Toolkit"}
     HD_PORTRAITS_DEPENDENCY: Final = {"UniqueID": "tlitookilakin.HDPortraits"}
 
