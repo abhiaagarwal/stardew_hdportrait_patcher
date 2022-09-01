@@ -166,14 +166,12 @@ def convert_portraits() -> None:
     with content_file.open("r") as content:
         content_dict: Dict[str, Any] = json5.load(content)
 
+    parsed_files: Dict[str, FileParsed] = {}
     metadata_item: Dict[str, Any]
     for index, metadata_item in enumerate(content_dict["Changes"].copy()):
         portrait_name: Final = pathlib.PurePath(metadata_item["Target"])
-        if portrait_name.parent.name is not "Portraits":
+        if portrait_name.parent.name != "Portraits":
             continue
-
-        metadata_item["Action"] = "Load"
-        portrait_item = deepcopy(metadata_item)
 
         portrait_file: Final = content_patch_dir / pathlib.PurePath(
             metadata_item["FromFile"]
@@ -181,20 +179,8 @@ def convert_portraits() -> None:
         metadata_file: Final = portrait_file.with_suffix(".json")
 
         hd_portraits_target_path: Final = hd_portraits / portrait_name.name
-        metadata_item["Target"] = hd_portraits_target_path.as_posix()
-        metadata_item["FromFile"] = metadata_file.relative_to(
-            content_patch_dir
-        ).as_posix()
-
         hd_portraits_patch_target_path: Final = hd_portraits_patch / portrait_name.name
-        portrait_item["Target"] = hd_portraits_patch_target_path.as_posix()
-        portrait_item["FromFile"] = portrait_file.relative_to(
-            content_patch_dir
-        ).as_posix()
 
-        content_dict["Changes"].insert(2 * index, portrait_item)
-
-        parsed_files: Dict[str, FileParsed] = {}
         if content_patcher_token.search(portrait_file.name):
             for globbed_portrait_file in portrait_file.parent.glob("*.png"):
                 if globbed_portrait_file.name in parsed_files:
@@ -234,6 +220,22 @@ def convert_portraits() -> None:
                 copy_dir,
                 force_rewrite=True,
             )
+
+        portrait_item = deepcopy(metadata_item)
+
+        metadata_item["Action"] = "Load"
+        metadata_item["Target"] = hd_portraits_target_path.as_posix()
+        metadata_item["FromFile"] = metadata_file.relative_to(
+            content_patch_dir
+        ).as_posix()
+
+        portrait_item["Action"] = "Load"
+        portrait_item["Target"] = hd_portraits_patch_target_path.as_posix()
+        portrait_item["FromFile"] = portrait_file.relative_to(
+            content_patch_dir
+        ).as_posix()
+
+        content_dict["Changes"].insert(2 * index, portrait_item)
 
     _rewrite(
         content_file,
