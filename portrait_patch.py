@@ -164,6 +164,24 @@ def content_patcher_portraits(
         hd_portraits_target_path: Final = hd_portraits / portrait_name.name
         hd_portraits_patch_target_path: Final = hd_portraits_patch / portrait_name.name
 
+        metadata_item.pop("PatchMode", None)
+
+        portrait_item = deepcopy(metadata_item)
+
+        metadata_item["Action"] = "Load"
+        metadata_item["Target"] = hd_portraits_target_path.as_posix()
+        metadata_item["FromFile"] = metadata_file.relative_to(
+            content_patch_dir
+        ).as_posix()
+
+        portrait_item["Action"] = "Load"
+        portrait_item["Target"] = hd_portraits_patch_target_path.as_posix()
+        portrait_item["FromFile"] = portrait_file.relative_to(
+            content_patch_dir
+        ).as_posix()
+
+        content_dict["Changes"].insert(2 * index, portrait_item)
+
         if content_patcher_token.search(portrait_file.name):
             glob_string: str = regex.sub(
                 content_patcher_token,
@@ -208,23 +226,7 @@ def content_patcher_portraits(
                 copy_dir,
                 force_rewrite=True,
             )
-
-        portrait_item = deepcopy(metadata_item)
-
-        metadata_item["Action"] = "Load"
-        metadata_item["Target"] = hd_portraits_target_path.as_posix()
-        metadata_item["FromFile"] = metadata_file.relative_to(
-            content_patch_dir
-        ).as_posix()
-
-        portrait_item["Action"] = "Load"
-        portrait_item["Target"] = hd_portraits_patch_target_path.as_posix()
-        portrait_item["FromFile"] = portrait_file.relative_to(
-            content_patch_dir
-        ).as_posix()
-
-        content_dict["Changes"].insert(2 * index, portrait_item)
-
+    
     _write_and_backup(
         content_file,
         content_dict,
@@ -254,9 +256,9 @@ class ModType(Enum):
 
     @classmethod
     def identify_folder(cls, directory: pathlib.Path):
-        if directory.name.startswith("[CP]") or (directory / "content.json").is_file():
+        if (directory / "content.json").is_file():
             return ModType.CONTENT_PATCHER
-        elif directory.name.startswith("[STM]"):
+        elif (directory / "shops.json").is_file():
             return ModType.SHOP_TILE_FRAMEWORK
         else:
             return None
