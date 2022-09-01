@@ -37,9 +37,9 @@ def _get_variant_metadata_file(
     portrait_file: pathlib.Path, variant: str | None, VARIANT_SEPARATOR: str
 ) -> pathlib.Path:
     return portrait_file.with_name(
-        portrait_file.name
-        if variant is None or portrait_file.name.endswith(variant)
-        else f"{portrait_file.name}{VARIANT_SEPARATOR}{variant}"
+        portrait_file.stem
+        if variant is None or portrait_file.stem.endswith(variant)
+        else f"{portrait_file.stem}{VARIANT_SEPARATOR}{variant}"
     ).with_suffix(".json")
 
 
