@@ -9,10 +9,11 @@ import argparse
 from ast import parse
 from enum import Enum, auto
 import logging
+from collections import defaultdict
 import pathlib
 import re as regex
 from copy import deepcopy
-from typing import Any, Dict, Final, List
+from typing import Any, Dict, Final, List, DefaultDict
 
 import json5
 
@@ -69,7 +70,7 @@ def _rewrite(
 
 def remove_pytk_dependency(manifest_file: pathlib.Path) -> Dict[str, Any]:
     with manifest_file.open("r") as manifest:
-        manifest_dict: Dict[str, Any] = json5.load(manifest)
+        manifest_dict: DefaultDict[str, Any] = defaultdict(list, json5.load(manifest))
     
     PYTK_DEPENDENCY: Final = {"UniqueID": "Platonymous.Toolkit"}
     HD_PORTRAITS_DEPENDENCY: Final = {"UniqueID": "tlitookilakin.HDPortraits"}
