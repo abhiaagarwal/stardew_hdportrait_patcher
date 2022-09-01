@@ -50,13 +50,9 @@ def _get_copy_dir(
     )
 
 
-def _valid_dir(path: str, check_content=False) -> pathlib.Path:
+def _valid_dir(path: str) -> pathlib.Path:
     directory = pathlib.Path(path)
     if directory.is_dir():
-        if check_content and not (directory / "content.json").is_file():
-            raise argparse.ArgumentTypeError(
-                f"{directory.resolve()} does not have content.json inside"
-            )
         return directory
     else:
         raise argparse.ArgumentTypeError(f"{directory.resolve()} is not a directory")
@@ -266,7 +262,7 @@ def main() -> None:
         "--path",
         "-p",
         required=True,
-        type=lambda str: _valid_dir(str, check_content=True),
+        type=_valid_dir,
         help="Path to directory containing mod folders, or a single mod folder",
     )
     parser.add_argument(
