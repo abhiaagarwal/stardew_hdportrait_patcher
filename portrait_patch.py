@@ -36,6 +36,16 @@ def _clone_dir_tree(source: pathlib.Path, destination: pathlib.Path) -> None:
     )
 
 
+def _get_variant_metadata(
+    portrait_file: pathlib.Path, variant: str | None, VARIANT_SEPARATOR: str
+) -> pathlib.Path:
+    return portrait_file.with_name(
+        portrait_file.name
+        if variant is None or portrait_file.name.endswith(variant)
+        else f"{portrait_file.name}{VARIANT_SEPARATOR}{variant}"
+    ).with_suffix(".json")
+
+
 def _get_copy_dir(
     copy_dir: pathlib.Path | None,
     copy_mode: bool,
@@ -97,10 +107,10 @@ def remove_pytk_dependency(manifest_file: pathlib.Path) -> Dict[str, Any]:
 
 
 def create_metadata_json(
-    metadata_file: pathlib.Path, target_name: str
+    portrait_file: pathlib.Path, target_name: str
 ) -> Dict[str, Any] | None:
     try:
-        with metadata_file.with_suffix(".pytk.json").open("r") as pytk_file:
+        with portrait_file.with_suffix(".pytk.json").open("r") as pytk_file:
             pytk_dict: Dict[str, Any] = json5.load(pytk_file)
     except FileNotFoundError:
         return None
@@ -141,6 +151,9 @@ def content_patcher_portraits(
     hd_portraits: pathlib.PurePath,
     hd_portraits_patch: pathlib.PurePath,
 ) -> None:
+    CP_WILDCARD: Final[str] = "*"
+    VARIANT_SEPARATOR: Final[str] = "_"
+
     if copy_dir is not None:
         _clone_dir_tree(content_patch_dir, copy_dir)
     content_file: Final = _get_file_or_backup(content_patch_dir / "content.json")
@@ -149,17 +162,29 @@ def content_patcher_portraits(
     with content_file.open("r") as content:
         content_dict: Dict[str, Any] = json5.load(content)
 
-    parsed_files: Dict[pathlib.Path, FileParsed] = {}
+    parsed_metadata_files: Dict[pathlib.Path, FileParsed] = {}
     metadata_item: Dict[str, Any]
     for index, metadata_item in enumerate(content_dict["Changes"].copy()):
         portrait_name: Final = pathlib.PurePath(metadata_item["Target"])
         if portrait_name.parent.name != "Portraits":
             continue
 
+        target_variant: str | None = (
+            variant
+            if (
+                variant := VARIANT_SEPARATOR.join(
+                    portrait_name.name.split(VARIANT_SEPARATOR)[1:]
+                )
+            )
+            else None
+        )
+
         portrait_file: Final = content_patch_dir / pathlib.PurePath(
             metadata_item["FromFile"]
         )
-        metadata_file: Final = portrait_file.with_suffix(".json")
+        metadata_file: Final = _get_variant_metadata(
+            portrait_file, target_variant, VARIANT_SEPARATOR
+        )
 
         hd_portraits_target_path: Final = hd_portraits / portrait_name.name
         hd_portraits_patch_target_path: Final = hd_portraits_patch / portrait_name.name
@@ -185,18 +210,23 @@ def content_patcher_portraits(
         if content_patcher_token.search(portrait_file.name):
             glob_string: str = regex.sub(
                 content_patcher_token,
-                "*",
+                CP_WILDCARD,
                 str(portrait_file.relative_to(content_patch_dir)),
             )
             for globbed_portrait_file in content_patch_dir.glob(glob_string):
-                if globbed_portrait_file.resolve() in parsed_files:
+                globbed_metadata_file = _get_variant_metadata(
+                    globbed_portrait_file, target_variant, VARIANT_SEPARATOR
+                )
+
+                if globbed_metadata_file.resolve() in parsed_metadata_files:
                     continue
 
-                parsed_files[globbed_portrait_file.resolve()] = FileParsed.GLOBBED
-                globbed_metadata_file = globbed_portrait_file.with_suffix(".json")
+                parsed_metadata_files[
+                    globbed_metadata_file.resolve()
+                ] = FileParsed.GLOBBED
 
                 globbed_metadata_json = create_metadata_json(
-                    globbed_metadata_file, hd_portraits_patch_target_path.as_posix()
+                    globbed_portrait_file, hd_portraits_patch_target_path.as_posix()
                 )
                 if globbed_metadata_json is None:
                     continue
@@ -209,10 +239,13 @@ def content_patcher_portraits(
                     force_rewrite=True,
                 )
         elif portrait_file.is_file():
-            if parsed_files.get(portrait_file.resolve()) is FileParsed.INDIVIDUAL:
+            if (
+                parsed_metadata_files.get(portrait_file.resolve())
+                is FileParsed.INDIVIDUAL
+            ):
                 continue
 
-            parsed_files[portrait_file.resolve()] = FileParsed.INDIVIDUAL
+            parsed_metadata_files[metadata_file.resolve()] = FileParsed.INDIVIDUAL
             metadata_json = create_metadata_json(
                 metadata_file, hd_portraits_patch_target_path.as_posix()
             )
@@ -226,7 +259,7 @@ def content_patcher_portraits(
                 copy_dir,
                 force_rewrite=True,
             )
-    
+
     _write_and_backup(
         content_file,
         content_dict,
