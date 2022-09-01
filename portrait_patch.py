@@ -1,7 +1,7 @@
 """
 Stardew Valley HD Portrait Patcher by purplexpresso
     Last Modified 8/31/22
-    Converts PyTK based HD Portrait mods for Stardew Valley into HD Portraits by swyrl compatible mod
+    Converts PyTK based HD Portrait mods for Stardew Valley into HD Portraits compatible mod
     See usage with portrait_patch.py --help
     Licensed under GPLv3.0
 """
@@ -295,6 +295,9 @@ def main() -> None:
 
     hd_portraits: Final = pathlib.PurePath("Mods/HDPortraits")
     hd_portraits_patch: Final = pathlib.PurePath(f"Mods/{args.prefix}")
+
+    if directory.parts[2:] == ("Stardew Valley", "Mods"):
+        print("Please do not run this script in your Stardew Valley/Mods folder! This script will modify every Content Pack you have installed. Could be scary! Please point to a specific mod")
 
     main_folder_type: ModType | None = ModType.identify_folder(directory)
     if main_folder_type is not None:
