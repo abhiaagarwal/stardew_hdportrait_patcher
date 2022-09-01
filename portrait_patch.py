@@ -170,13 +170,8 @@ def content_patcher_portraits(
             continue
 
         target_variant: str | None = (
-            variant
-            if (
-                variant := VARIANT_SEPARATOR.join(
-                    portrait_name.name.split(VARIANT_SEPARATOR)[1:]
-                )
-            )
-            else None
+            VARIANT_SEPARATOR.join(portrait_name.name.split(VARIANT_SEPARATOR)[1:])
+            or None
         )
 
         portrait_file: Final = content_patch_dir / pathlib.PurePath(
