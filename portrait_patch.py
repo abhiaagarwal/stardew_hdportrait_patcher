@@ -63,7 +63,7 @@ def _get_file_or_backup(file: pathlib.Path) -> pathlib.Path:
     return backup_file if backup_file.is_file() else file
 
 
-def _rewrite(
+def _write_and_backup(
     file: pathlib.Path,
     json_data: Dict[str, Any],
     main_dir: pathlib.Path,
@@ -73,7 +73,7 @@ def _rewrite(
     backup_file = file.with_suffix(".bak")
     if not (force_rewrite or copy_dir or backup_file.is_file()):
         file.rename(backup_file)
-    with (file if copy_dir is None else copy_dir / file.relative_to(main_dir)).open(
+    with (file if copy_dir is None else copy_dir / file.relative_to(main_dir)).with_suffix(".json").open(
         "w+"
     ) as new_file:
         json5.dump(json_data, new_file, quote_keys=True, indent=4)
@@ -87,7 +87,8 @@ def remove_pytk_dependency(manifest_file: pathlib.Path) -> Dict[str, Any]:
     HD_PORTRAITS_DEPENDENCY: Final = {"UniqueID": "tlitookilakin.HDPortraits"}
 
     dependencies: List[Dict[str, str]] = manifest_dict["Dependencies"]
-    dependencies.append(HD_PORTRAITS_DEPENDENCY)
+    if HD_PORTRAITS_DEPENDENCY not in dependencies:
+        dependencies.append(HD_PORTRAITS_DEPENDENCY)
     try:
         dependencies.remove(PYTK_DEPENDENCY)
     except ValueError:
@@ -177,7 +178,7 @@ def content_patcher_portraits(
                 if globbed_metadata_json is None:
                     continue
 
-                _rewrite(
+                _write_and_backup(
                     globbed_metadata_file,
                     globbed_metadata_json,
                     content_patch_dir,
@@ -195,7 +196,7 @@ def content_patcher_portraits(
             if metadata_json is None:
                 continue
 
-            _rewrite(
+            _write_and_backup(
                 metadata_file,
                 metadata_json,
                 content_patch_dir,
@@ -219,7 +220,7 @@ def content_patcher_portraits(
 
         content_dict["Changes"].insert(2 * index, portrait_item)
 
-    _rewrite(
+    _write_and_backup(
         content_file,
         content_dict,
         content_patch_dir,
@@ -229,7 +230,7 @@ def content_patcher_portraits(
     manifest_file: Final = _get_file_or_backup(content_patch_dir / "manifest.json")
     manifest_dict: Final = remove_pytk_dependency(manifest_file)
 
-    _rewrite(
+    _write_and_backup(
         manifest_file,
         manifest_dict,
         content_patch_dir,
