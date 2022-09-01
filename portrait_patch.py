@@ -3,7 +3,7 @@ Stardew Valley HD Portrait Patcher by purplexpresso
     Last Modified 8/31/22
     Converts PyTK based HD Portrait mods for Stardew Valley into HD Portraits by swyrl compatible mod
     See usage with portrait_patch.py --help
-    Licensed under GPL 3.0
+    Licensed under GPLv3.0
 """
 import argparse
 from enum import Enum, auto
@@ -32,7 +32,7 @@ def _clone_dir_tree(source: pathlib.Path, destination: pathlib.Path) -> None:
         ignore=lambda directory, files: [
             file for file in files if (pathlib.Path(directory) / file).is_file()
         ],
-        dirs_exist_ok=not source == destination.parent,
+        dirs_exist_ok=not (source in destination.parts),  # prevent recursion
     )
 
 
@@ -240,6 +240,8 @@ def content_patcher_portraits(
 ModTypeFunctions = Callable[
     [pathlib.Path, pathlib.Path | None, pathlib.PurePath, pathlib.PurePath], None
 ]
+
+
 class ModType(Enum):
     CONTENT_PATCHER: ModTypeFunctions = partial(content_patcher_portraits)  # type: ignore
     SHOP_TILE_FRAMEWORK: ModTypeFunctions = partial(shop_tile_framework_portraits)  # type: ignore
