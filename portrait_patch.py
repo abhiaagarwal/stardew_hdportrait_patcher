@@ -12,7 +12,8 @@ from collections import defaultdict
 import pathlib
 import re as regex
 from copy import deepcopy
-from typing import Any, Dict, Final, List, DefaultDict
+from typing import Any, Dict, Final, List, DefaultDict, Callable
+from functools import partial
 
 import json5
 
@@ -35,6 +36,20 @@ def _clone_dir_tree(source: pathlib.Path, destination: pathlib.Path) -> None:
     )
 
 
+def _get_copy_dir(
+    copy_dir: pathlib.Path | None,
+    copy_mode: bool,
+    main_directory: pathlib.Path,
+    subdirectory: pathlib.Path,
+) -> pathlib.Path | None:
+    return (
+        (copy_dir if copy_dir is not None else main_directory / "Patched HD Portraits")
+        / subdirectory.name
+        if copy_mode
+        else None
+    )
+
+
 def _valid_dir(path: str, check_content=False) -> pathlib.Path:
     directory = pathlib.Path(path)
     if directory.is_dir():
@@ -44,7 +59,7 @@ def _valid_dir(path: str, check_content=False) -> pathlib.Path:
             )
         return directory
     else:
-        raise argparse.ArgumentTypeError(f"{directory.resolve()} is not a valid path")
+        raise argparse.ArgumentTypeError(f"{directory.resolve()} is not a directory")
 
 
 def _get_file_or_backup(file: pathlib.Path) -> pathlib.Path:
@@ -114,52 +129,23 @@ def create_metadata_json(
     return asset_dict
 
 
-def convert_portraits() -> None:
-    parser = argparse.ArgumentParser(
-        description="Converts PyTK based HD Portrait mods for Stardew Valley into HD Portraits by swyrl compatible mod",
-    )
-    parser.add_argument(
-        "--path",
-        "-p",
-        required=True,
-        type=lambda str: _valid_dir(str, check_content=True),
-        help="Path to Content Patcher directory",
-    )
-    parser.add_argument(
-        "--mode",
-        "-m",
-        default="internal",
-        type=str,
-        choices=["internal", "copy"],
-        help="Mode of operation. [internal] changes the files inside the folder, while [copy] creates a new folder structure entirely, most useful with a VFS",
-    )
-    parser.add_argument(
-        "--copy_dir",
-        nargs="?",
-        type=_valid_dir,
-        help="Sets directory where copied files are outputed. Only valid if --mode copy is specified",
-    )
-    parser.add_argument(
-        "--prefix",
-        default="HDPortraitsPatch",
-        type=str,
-        help="Prefix on generated Targets. Do not touch unless you know what you're doing.",
-    )
-    args = parser.parse_args()
+def shop_tile_framework_portraits(
+    content_patch_dir: pathlib.Path,
+    copy_dir: pathlib.Path,
+    hd_portraits: pathlib.PurePath,
+    hd_portraits_patch: pathlib.PurePath,
+) -> None:
+    return
 
-    content_patch_dir: Final[pathlib.Path] = args.path
-    copy_dir: Final[pathlib.Path] | None = (
-        (args.copy_dir if args.copy_dir is not None else content_patch_dir)
-        / content_patch_dir.name
-        if args.mode == "copy"
-        else None
-    )
-    if copy_dir:
+
+def content_patcher_portraits(
+    content_patch_dir: pathlib.Path,
+    copy_dir: pathlib.Path | None,
+    hd_portraits: pathlib.PurePath,
+    hd_portraits_patch: pathlib.PurePath,
+) -> None:
+    if copy_dir is not None:
         _clone_dir_tree(content_patch_dir, copy_dir)
-
-    hd_portraits: Final = pathlib.PurePath("Mods/HDPortraits")
-    hd_portraits_patch: Final = pathlib.PurePath(f"Mods/{args.prefix}")
-
     content_file: Final = _get_file_or_backup(content_patch_dir / "content.json")
 
     content_patcher_token: Final = regex.compile(r"\{\{(.*)\}\}")
@@ -254,8 +240,87 @@ def convert_portraits() -> None:
         copy_dir,
     )
 
+
+ModTypeFunctions = Callable[
+    [pathlib.Path, pathlib.Path | None, pathlib.PurePath, pathlib.PurePath], None
+]
+class ModType(Enum):
+    CONTENT_PATCHER: ModTypeFunctions = partial(content_patcher_portraits)  # type: ignore
+    SHOP_TILE_FRAMEWORK: ModTypeFunctions = partial(shop_tile_framework_portraits)  # type: ignore
+
+    @classmethod
+    def identify_folder(cls, directory: pathlib.Path):
+        if directory.name.startswith("[CP]") and (directory / "content.json").is_file():
+            return ModType.CONTENT_PATCHER
+        elif directory.name.startswith("[STM]"):
+            return ModType.SHOP_TILE_FRAMEWORK
+        else:
+            return None
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Converts PyTK based HD Portrait mods for Stardew Valley into HD Portraits by swyrl compatible mod",
+    )
+    parser.add_argument(
+        "--path",
+        "-p",
+        required=True,
+        type=lambda str: _valid_dir(str, check_content=True),
+        help="Path to directory containing mod folders, or a single mod folder",
+    )
+    parser.add_argument(
+        "--mode",
+        "-m",
+        default="internal",
+        type=str,
+        choices=["internal", "copy"],
+        help="Mode of operation. [internal] changes the files inside the folder, while [copy] creates a new folder structure entirely, most useful with a VFS",
+    )
+    parser.add_argument(
+        "--copy_dir",
+        nargs="?",
+        type=_valid_dir,
+        help="Sets directory where copied files are outputed. Only valid if --mode copy is specified",
+    )
+    parser.add_argument(
+        "--prefix",
+        default="HDPortraitsPatch",
+        type=str,
+        help="Prefix on generated Targets. Do not touch unless you know what you're doing.",
+    )
+    args = parser.parse_args()
+
+    directory: Final[pathlib.Path] = args.path
+    copy_mode: Final[bool] = args.mode == "copy"
+    copy_dir: Final[pathlib.Path] | None = args.copy_dir
+
+    hd_portraits: Final = pathlib.PurePath("Mods/HDPortraits")
+    hd_portraits_patch: Final = pathlib.PurePath(f"Mods/{args.prefix}")
+
+    main_folder_type: ModType | None = ModType.identify_folder(directory)
+    if main_folder_type is not None:
+        main_folder_type.value(
+            directory,
+            _get_copy_dir(copy_dir, copy_mode, directory, directory),
+            hd_portraits,
+            hd_portraits_patch,
+        )
+    else:
+        for subdirectory in directory.iterdir():
+            if not subdirectory.is_dir():
+                continue
+            subdirectory_type: ModType | None = ModType.identify_folder(subdirectory)
+            if subdirectory_type is not None:
+                subdirectory_type.value(
+                    subdirectory,
+                    _get_copy_dir(copy_dir, copy_mode, directory, subdirectory),
+                    hd_portraits,
+                    hd_portraits_patch,
+                )
+
     return
 
 
 if __name__ == "__main__":
-    convert_portraits()
+    main()
