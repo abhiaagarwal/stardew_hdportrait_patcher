@@ -51,7 +51,7 @@ def _get_copy_dir(
 ) -> pathlib.Path | None:
     return (
         (copy_dir if copy_dir is not None else main_directory / "Patched HD Portraits")
-        / subdirectory.name
+        / subdirectory.stem
         if copy_mode
         else None
     )
@@ -171,11 +171,11 @@ def content_patcher_portraits(
     metadata_item: Dict[str, Any]
     for index, metadata_item in enumerate(content_dict["Changes"].copy()):
         portrait_name: Final = pathlib.PurePath(metadata_item["Target"])
-        if portrait_name.parent.name != "Portraits":
+        if portrait_name.parent.stem != "Portraits":
             continue
 
         target_variant: str | None = (
-            VARIANT_SEPARATOR.join(portrait_name.name.split(VARIANT_SEPARATOR)[1:])
+            VARIANT_SEPARATOR.join(portrait_name.stem.split(VARIANT_SEPARATOR)[1:])
             or None
         )
 
@@ -186,8 +186,8 @@ def content_patcher_portraits(
             portrait_file, target_variant, VARIANT_SEPARATOR
         )
 
-        hd_portraits_target_path: Final = hd_portraits / portrait_name.name
-        hd_portraits_patch_target_path: Final = hd_portraits_patch / portrait_name.name
+        hd_portraits_target_path: Final = hd_portraits / portrait_name.stem
+        hd_portraits_patch_target_path: Final = hd_portraits_patch / portrait_name.stem
 
         metadata_item.pop("PatchMode", None)
 
@@ -207,7 +207,7 @@ def content_patcher_portraits(
 
         content_dict["Changes"].insert(2 * index, portrait_item)
 
-        if content_patcher_token.search(portrait_file.name):
+        if content_patcher_token.search(portrait_file.stem):
             glob_string: str = regex.sub(
                 content_patcher_token,
                 CP_WILDCARD,
