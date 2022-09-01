@@ -73,9 +73,9 @@ def _write_and_backup(
     backup_file = file.with_suffix(".bak")
     if not (force_rewrite or copy_dir or backup_file.is_file()):
         file.rename(backup_file)
-    with (file if copy_dir is None else copy_dir / file.relative_to(main_dir)).with_suffix(".json").open(
-        "w+"
-    ) as new_file:
+    with (
+        file if copy_dir is None else copy_dir / file.relative_to(main_dir)
+    ).with_suffix(".json").open("w+") as new_file:
         json5.dump(json_data, new_file, quote_keys=True, indent=4)
 
 
@@ -145,7 +145,7 @@ def content_patcher_portraits(
         _clone_dir_tree(content_patch_dir, copy_dir)
     content_file: Final = _get_file_or_backup(content_patch_dir / "content.json")
 
-    content_patcher_token: Final = regex.compile(r"\{\{(.*)\}\}")
+    content_patcher_token: Final = regex.compile(r"\{\{[a-zA-Z0-9_./]+\}\}")
     with content_file.open("r") as content:
         content_dict: Dict[str, Any] = json5.load(content)
 
@@ -165,7 +165,12 @@ def content_patcher_portraits(
         hd_portraits_patch_target_path: Final = hd_portraits_patch / portrait_name.name
 
         if content_patcher_token.search(portrait_file.name):
-            for globbed_portrait_file in portrait_file.parent.glob("*.png"):
+            glob_string: str = regex.sub(
+                content_patcher_token,
+                "*",
+                str(portrait_file.relative_to(content_patch_dir)),
+            )
+            for globbed_portrait_file in content_patch_dir.glob(glob_string):
                 if globbed_portrait_file.name in parsed_files:
                     continue
 
@@ -249,7 +254,7 @@ class ModType(Enum):
 
     @classmethod
     def identify_folder(cls, directory: pathlib.Path):
-        if directory.name.startswith("[CP]") and (directory / "content.json").is_file():
+        if directory.name.startswith("[CP]") or (directory / "content.json").is_file():
             return ModType.CONTENT_PATCHER
         elif directory.name.startswith("[STM]"):
             return ModType.SHOP_TILE_FRAMEWORK
@@ -259,7 +264,7 @@ class ModType(Enum):
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Converts PyTK based HD Portrait mods for Stardew Valley into HD Portraits by swyrl compatible mod",
+        description="Converts PyTK based HD Portrait mods for Stardew Valley into HD Portraits compatible mod",
     )
     parser.add_argument(
         "--path",
@@ -298,7 +303,9 @@ def main() -> None:
     hd_portraits_patch: Final = pathlib.PurePath(f"Mods/{args.prefix}")
 
     if directory.parts[2:] == ("Stardew Valley", "Mods"):
-        print("Please do not run this script in your Stardew Valley/Mods folder! This script will modify every Content Pack you have installed. Could be scary! Please point to a specific mod")
+        print(
+            "Please do not run this script in your Stardew Valley/Mods folder! This script will modify every Content Pack you have installed. Could be scary! Please point to a specific mod"
+        )
 
     main_folder_type: ModType | None = ModType.identify_folder(directory)
     if main_folder_type is not None:
