@@ -177,7 +177,7 @@ def content_patcher_portraits(
         portrait_file: Final = content_patch_dir / pathlib.PurePath(
             metadata_item["FromFile"]
         )
-        metadata_file: Final = _get_variant_metadata(
+        metadata_file: Final = _get_variant_metadata_file(
             portrait_file, target_variant, VARIANT_SEPARATOR
         )
 
@@ -209,7 +209,7 @@ def content_patcher_portraits(
                 str(portrait_file.relative_to(content_patch_dir)),
             )
             for globbed_portrait_file in content_patch_dir.glob(glob_string):
-                globbed_metadata_file = _get_variant_metadata(
+                globbed_metadata_file = _get_variant_metadata_file(
                     globbed_portrait_file, target_variant, VARIANT_SEPARATOR
                 )
 
@@ -235,14 +235,14 @@ def content_patcher_portraits(
                 )
         elif portrait_file.is_file():
             if (
-                parsed_metadata_files.get(portrait_file.resolve())
+                parsed_metadata_files.get(metadata_file.resolve())
                 is FileParsed.INDIVIDUAL
             ):
                 continue
 
             parsed_metadata_files[metadata_file.resolve()] = FileParsed.INDIVIDUAL
             metadata_json = create_metadata_json(
-                metadata_file, hd_portraits_patch_target_path.as_posix()
+                portrait_file, hd_portraits_patch_target_path.as_posix()
             )
             if metadata_json is None:
                 continue
