@@ -149,7 +149,7 @@ def content_patcher_portraits(
     with content_file.open("r") as content:
         content_dict: Dict[str, Any] = json5.load(content)
 
-    parsed_files: Dict[str, FileParsed] = {}
+    parsed_files: Dict[pathlib.Path, FileParsed] = {}
     metadata_item: Dict[str, Any]
     for index, metadata_item in enumerate(content_dict["Changes"].copy()):
         portrait_name: Final = pathlib.PurePath(metadata_item["Target"])
@@ -171,10 +171,10 @@ def content_patcher_portraits(
                 str(portrait_file.relative_to(content_patch_dir)),
             )
             for globbed_portrait_file in content_patch_dir.glob(glob_string):
-                if globbed_portrait_file.name in parsed_files:
+                if globbed_portrait_file.resolve() in parsed_files:
                     continue
 
-                parsed_files[globbed_portrait_file.name] = FileParsed.GLOBBED
+                parsed_files[globbed_portrait_file.resolve()] = FileParsed.GLOBBED
                 globbed_metadata_file = globbed_portrait_file.with_suffix(".json")
 
                 globbed_metadata_json = create_metadata_json(
@@ -191,10 +191,10 @@ def content_patcher_portraits(
                     force_rewrite=True,
                 )
         elif portrait_file.is_file():
-            if parsed_files.get(portrait_file.name) is FileParsed.INDIVIDUAL:
+            if parsed_files.get(portrait_file.resolve()) is FileParsed.INDIVIDUAL:
                 continue
 
-            parsed_files[portrait_file.name] = FileParsed.INDIVIDUAL
+            parsed_files[portrait_file.resolve()] = FileParsed.INDIVIDUAL
             metadata_json = create_metadata_json(
                 metadata_file, hd_portraits_patch_target_path.as_posix()
             )
