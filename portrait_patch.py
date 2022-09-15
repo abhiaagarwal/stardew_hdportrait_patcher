@@ -29,7 +29,7 @@ def _clone_dir_tree(source: pathlib.Path, destination: pathlib.Path) -> None:
         ignore=lambda directory, files: [
             file for file in files if (pathlib.Path(directory) / file).is_file()
         ],
-        dirs_exist_ok=not (source in destination.parts),  # prevent recursion
+        dirs_exist_ok=not (source.name in destination.parts),  # prevent recursion
     )
 
 
